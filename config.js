@@ -1,13 +1,13 @@
 module.exports = {
-    excelPath: "C:\\Users\\Lenovo\\Desktop\\测试\\影刀社区数据.xlsx",
+    excelPath: process.env.EXCEL_PATH || "C:\\Users\\Lenovo\\Desktop\\测试\\影刀社区数据.xlsx",
     mysql: {
-        host: "localhost",
-        port: 3306,
-        user: "root",
-        password: "!@#123QWEasd",
-        database: "yingdao_community"
+        host: process.env.MYSQL_HOST || "localhost",
+        port: parseInt(process.env.MYSQL_PORT) || 3306,
+        user: process.env.MYSQL_USER || "root",
+        password: process.env.MYSQL_PASSWORD || "!@#123QWEasd",
+        database: process.env.MYSQL_DATABASE || "yingdao_community"
     },
     server: {
-        port: 3000
+        port: parseInt(process.env.PORT) || 3000
     }
 };

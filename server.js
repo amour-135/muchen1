@@ -85,6 +85,7 @@ app.post('/api/import', async (req, res) => {
     }
 });
 
-app.listen(config.server.port, () => {
+app.listen(config.server.port, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${config.server.port}`);
+    console.log(`Server accessible on local network at http://0.0.0.0:${config.server.port}`);
 });
