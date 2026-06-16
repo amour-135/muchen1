@@ -1,0 +1,10 @@
+﻿git.exe : Pushing to https://github.com/amour-135/muchen1.git
+所在位置 行:1 字符: 5
++ & { & "C:\Program Files\Git\bin\git.exe" push -u origin maste
+r --verb ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Pushing to http.. 
+   .135/muchen1.git:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

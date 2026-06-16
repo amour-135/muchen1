@@ -1,0 +1,90 @@
+const express = require('express');
+const cors = require('cors');
+const config = require('./config');
+const { queryData, queryStats, createTable, insertData } = require('./utils/database');
+const { readExcelFile } = require('./utils/excelReader');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+
+app.get('/api/data', async (req, res) => {
+    try {
+        const conditions = {};
+        if (req.query.category) conditions['内容分类'] = req.query.category;
+        if (req.query.author) conditions['作者'] = req.query.author;
+        if (req.query.sentiment) conditions['用户情绪'] = req.query.sentiment;
+        
+        const data = await queryData('community_data', conditions);
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/stats', async (req, res) => {
+    try {
+        const stats = await queryStats('community_data');
+        res.json({ success: true, data: stats });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/categories', async (req, res) => {
+    try {
+        const stats = await queryStats('community_data');
+        res.json({ success: true, data: stats.categoryStats });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/sentiment', async (req, res) => {
+    try {
+        const stats = await queryStats('community_data');
+        res.json({ success: true, data: stats.sentimentStats });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/authors', async (req, res) => {
+    try {
+        const stats = await queryStats('community_data');
+        res.json({ success: true, data: stats.topAuthors });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/import', async (req, res) => {
+    try {
+        console.log('Starting data import from Excel...');
+        const { headers, data, originalHeaders } = readExcelFile(config.excelPath);
+        
+        console.log('Excel Headers:', originalHeaders);
+        console.log('Total rows:', data.length);
+        
+        const tableName = 'community_data';
+        await createTable(tableName, headers);
+        await insertData(tableName, headers, data);
+        
+        const stats = await queryStats('community_data');
+        console.log('Data import completed successfully!');
+        
+        res.json({ 
+            success: true, 
+            message: `数据导入成功！共导入 ${data.length} 条记录`,
+            data: stats 
+        });
+    } catch (error) {
+        console.error('Error importing data:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.listen(config.server.port, () => {
+    console.log(`Server running on http://localhost:${config.server.port}`);
+});
