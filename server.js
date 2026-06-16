@@ -9,7 +9,11 @@ app.use(express.static('public'));
 
 let databaseModule, excelReaderModule;
 try {
-    databaseModule = require('./utils/database');
+    if (config.dbType === 'supabase') {
+        databaseModule = require('./utils/supabase');
+    } else {
+        databaseModule = require('./utils/database');
+    }
     excelReaderModule = require('./utils/excelReader');
 } catch (error) {
     console.log('Database module not available:', error.message);
