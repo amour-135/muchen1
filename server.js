@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const config = require('./config');
 
 const app = express();
@@ -8,6 +10,9 @@ app.use(express.json());
 app.use(express.static('public'));
 
 let databaseModule, excelReaderModule;
+let lastExcelModifiedTime = 0;
+let isSyncing = false;
+
 try {
     if (config.dbType === 'supabase') {
         databaseModule = require('./utils/supabase');
@@ -17,6 +22,107 @@ try {
     excelReaderModule = require('./utils/excelReader');
 } catch (error) {
     console.log('Database module not available:', error.message);
+}
+
+async function syncFromExcel() {
+    if (isSyncing) {
+        console.log('Sync already in progress, skipping...');
+        return;
+    }
+    
+    if (!databaseModule || !excelReaderModule) {
+        console.log('Database or Excel module not configured, skipping sync');
+        return;
+    }
+    
+    isSyncing = true;
+    try {
+        console.log('\n=== Auto Sync Triggered ===');
+        
+        const { readExcelFile } = excelReaderModule;
+        const { getClient, insertData, queryStats } = databaseModule;
+        
+        const { headers, data } = readExcelFile(config.excelPath);
+        console.log(`Read ${data.length} rows from Excel`);
+        
+        const sb = getClient();
+        const { error: deleteError } = await sb.from('community_data').delete().neq('id', 0);
+        if (deleteError) {
+            console.error('Error deleting old data:', deleteError);
+            throw deleteError;
+        }
+        console.log('Old data cleared');
+        
+        await insertData('community_data', headers, data);
+        
+        const stats = await queryStats('community_data');
+        console.log(`Sync completed! Total: ${stats.totalPosts} posts, ${stats.categoryStats.length} categories, ${stats.sentimentStats.length} sentiments`);
+        
+    } catch (error) {
+        console.error('Auto sync failed:', error.message);
+    } finally {
+        isSyncing = false;
+    }
+}
+
+function startFileWatcher() {
+    if (!excelReaderModule) {
+        console.log('Excel module not available, skipping file watcher');
+        return;
+    }
+    
+    const excelFilePath = path.resolve(config.excelPath);
+    
+    if (!fs.existsSync(excelFilePath)) {
+        console.log(`Excel file not found: ${excelFilePath}`);
+        return;
+    }
+    
+    try {
+        const stat = fs.statSync(excelFilePath);
+        lastExcelModifiedTime = stat.mtime.getTime();
+        console.log(`Watching Excel file: ${excelFilePath}`);
+        console.log(`Initial modified time: ${new Date(lastExcelModifiedTime).toLocaleString()}`);
+    } catch (error) {
+        console.error('Error getting file stats:', error);
+        return;
+    }
+    
+    fs.watch(excelFilePath, (eventType, filename) => {
+        if (eventType === 'change') {
+            console.log(`\nExcel file changed: ${filename}`);
+            
+            fs.stat(excelFilePath, (err, stat) => {
+                if (err) {
+                    console.error('Error getting file stats:', err);
+                    return;
+                }
+                
+                const newModifiedTime = stat.mtime.getTime();
+                if (newModifiedTime > lastExcelModifiedTime) {
+                    lastExcelModifiedTime = newModifiedTime;
+                    console.log(`File modification detected at: ${new Date(newModifiedTime).toLocaleString()}`);
+                    
+                    setTimeout(() => {
+                        syncFromExcel();
+                    }, 2000);
+                }
+            });
+        }
+    });
+    
+    setInterval(() => {
+        fs.stat(excelFilePath, (err, stat) => {
+            if (err) return;
+            
+            const newModifiedTime = stat.mtime.getTime();
+            if (newModifiedTime > lastExcelModifiedTime) {
+                lastExcelModifiedTime = newModifiedTime;
+                console.log(`Periodic check: File modified, triggering sync...`);
+                syncFromExcel();
+            }
+        });
+    }, 60000);
 }
 
 app.get('/api/data', async (req, res) => {
@@ -95,7 +201,7 @@ app.post('/api/import', async (req, res) => {
             return res.status(500).json({ success: false, error: 'Database or Excel module not configured' });
         }
         const { readExcelFile } = excelReaderModule;
-        const { createTable, insertData, queryStats } = databaseModule;
+        const { getClient, insertData, queryStats } = databaseModule;
         
         console.log('Starting data import from Excel...');
         const { headers, data, originalHeaders } = readExcelFile(config.excelPath);
@@ -103,9 +209,14 @@ app.post('/api/import', async (req, res) => {
         console.log('Excel Headers:', originalHeaders);
         console.log('Total rows:', data.length);
         
-        const tableName = 'community_data';
-        await createTable(tableName, headers);
-        await insertData(tableName, headers, data);
+        const sb = getClient();
+        const { error: deleteError } = await sb.from('community_data').delete().neq('id', 0);
+        if (deleteError) {
+            console.error('Error deleting old data:', deleteError);
+            throw deleteError;
+        }
+        
+        await insertData('community_data', headers, data);
         
         const stats = await queryStats('community_data');
         console.log('Data import completed successfully!');
@@ -121,10 +232,25 @@ app.post('/api/import', async (req, res) => {
     }
 });
 
+app.get('/api/sync-status', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            isSyncing,
+            lastModifiedTime: new Date(lastExcelModifiedTime).toLocaleString(),
+            excelPath: config.excelPath
+        }
+    });
+});
+
 if (require.main === module) {
     app.listen(config.server.port, '0.0.0.0', () => {
         console.log(`Server running on http://localhost:${config.server.port}`);
         console.log(`Server accessible on local network at http://0.0.0.0:${config.server.port}`);
+        
+        if (config.dbType === 'supabase') {
+            startFileWatcher();
+        }
     });
 }
 
