@@ -1,16 +1,26 @@
 const express = require('express');
 const cors = require('cors');
 const config = require('./config');
-const { queryData, queryStats, createTable, insertData } = require('./utils/database');
-const { readExcelFile } = require('./utils/excelReader');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+let databaseModule, excelReaderModule;
+try {
+    databaseModule = require('./utils/database');
+    excelReaderModule = require('./utils/excelReader');
+} catch (error) {
+    console.log('Database module not available:', error.message);
+}
+
 app.get('/api/data', async (req, res) => {
     try {
+        if (!databaseModule) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
+        const { queryData } = databaseModule;
         const conditions = {};
         if (req.query.category) conditions['内容分类'] = req.query.category;
         if (req.query.author) conditions['作者'] = req.query.author;
@@ -25,6 +35,10 @@ app.get('/api/data', async (req, res) => {
 
 app.get('/api/stats', async (req, res) => {
     try {
+        if (!databaseModule) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
+        const { queryStats } = databaseModule;
         const stats = await queryStats('community_data');
         res.json({ success: true, data: stats });
     } catch (error) {
@@ -34,6 +48,10 @@ app.get('/api/stats', async (req, res) => {
 
 app.get('/api/categories', async (req, res) => {
     try {
+        if (!databaseModule) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
+        const { queryStats } = databaseModule;
         const stats = await queryStats('community_data');
         res.json({ success: true, data: stats.categoryStats });
     } catch (error) {
@@ -43,6 +61,10 @@ app.get('/api/categories', async (req, res) => {
 
 app.get('/api/sentiment', async (req, res) => {
     try {
+        if (!databaseModule) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
+        const { queryStats } = databaseModule;
         const stats = await queryStats('community_data');
         res.json({ success: true, data: stats.sentimentStats });
     } catch (error) {
@@ -52,6 +74,10 @@ app.get('/api/sentiment', async (req, res) => {
 
 app.get('/api/authors', async (req, res) => {
     try {
+        if (!databaseModule) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
+        const { queryStats } = databaseModule;
         const stats = await queryStats('community_data');
         res.json({ success: true, data: stats.topAuthors });
     } catch (error) {
@@ -61,6 +87,12 @@ app.get('/api/authors', async (req, res) => {
 
 app.post('/api/import', async (req, res) => {
     try {
+        if (!databaseModule || !excelReaderModule) {
+            return res.status(500).json({ success: false, error: 'Database or Excel module not configured' });
+        }
+        const { readExcelFile } = excelReaderModule;
+        const { createTable, insertData, queryStats } = databaseModule;
+        
         console.log('Starting data import from Excel...');
         const { headers, data, originalHeaders } = readExcelFile(config.excelPath);
         

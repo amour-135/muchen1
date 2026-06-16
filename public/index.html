@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>影刀社区智能数据看板 | 运营·产品·生态全景洞察</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="mockData.js"></script>
     <style>
         * {
             margin: 0;
@@ -406,7 +407,7 @@
 </div>
 
 <script>
-    const API_BASE = 'http://localhost:3000/api';
+    const API_BASE = '/api';
     let charts = {};
     let rawData = [];
     let statsData = {};
@@ -432,9 +433,35 @@
             }
             lastPostCount = statsData.totalPosts;
         } catch (error) {
-            console.error('Failed to load data:', error);
-            alert('数据加载失败，请检查后端服务是否运行');
+            console.warn('API不可用，使用模拟数据:', error);
+            useMockData();
         }
+    }
+
+    function useMockData() {
+        const mock = window.mockStats || {
+            totalRecords: 420,
+            categoryStats: [{ name: '功能建议', value: 120 }, { name: '问题反馈', value: 95 }, { name: '使用技巧', value: 80 }, { name: '案例分享', value: 65 }, { name: '其他', value: 60 }],
+            sentimentStats: [{ name: '积极', value: 200 }, { name: '中性', value: 150 }, { name: '消极', value: 70 }],
+            topAuthors: [{ name: '用户A', posts: 35 }, { name: '用户B', posts: 28 }, { name: '用户C', posts: 25 }, { name: '用户D', posts: 22 }, { name: '用户E', posts: 18 }]
+        };
+        
+        statsData = {
+            totalPosts: mock.totalRecords,
+            categoryStats: mock.categoryStats.map(c => ({ 内容分类: c.name, count: c.value })),
+            sentimentStats: mock.sentimentStats.map(s => ({ 用户情绪: s.name, count: s.value })),
+            topAuthors: mock.topAuthors.map(a => ({ 作者: a.name, posts: a.count || a.posts }))
+        };
+        
+        rawData = [];
+        mock.categoryStats.forEach(cat => {
+            for (let i = 0; i < Math.min(cat.value, 10); i++) {
+                rawData.push({ 作者: mock.topAuthors[Math.floor(Math.random() * mock.topAuthors.length)].name, 内容分类: cat.name, 用户情绪: mock.sentimentStats[Math.floor(Math.random() * mock.sentimentStats.length)].name });
+            }
+        });
+        
+        updateDashboard();
+        document.getElementById('updateTime').textContent = new Date().toLocaleString();
     }
 
     async function refreshData() {
