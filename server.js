@@ -21,7 +21,7 @@ try {
     }
     excelReaderModule = require('./utils/excelReader');
 } catch (error) {
-    console.log('Database module not available:', error.message);
+    console.log('Module loading error:', error.message);
 }
 
 async function syncFromExcel() {
@@ -197,9 +197,17 @@ app.get('/api/authors', async (req, res) => {
 
 app.post('/api/import', async (req, res) => {
     try {
-        if (!databaseModule || !excelReaderModule) {
-            return res.status(500).json({ success: false, error: 'Database or Excel module not configured' });
+        if (!databaseModule) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
         }
+        
+        if (!excelReaderModule) {
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Excel module not available. This feature is only available when running locally.' 
+            });
+        }
+        
         const { readExcelFile } = excelReaderModule;
         const { getClient, insertData, queryStats } = databaseModule;
         
@@ -238,9 +246,18 @@ app.get('/api/sync-status', (req, res) => {
         data: {
             isSyncing,
             lastModifiedTime: new Date(lastExcelModifiedTime).toLocaleString(),
-            excelPath: config.excelPath
+            excelPath: config.excelPath,
+            environment: process.env.VERCEL ? 'Vercel Serverless' : 'Local'
         }
     });
+});
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 if (require.main === module) {
@@ -248,7 +265,7 @@ if (require.main === module) {
         console.log(`Server running on http://localhost:${config.server.port}`);
         console.log(`Server accessible on local network at http://0.0.0.0:${config.server.port}`);
         
-        if (config.dbType === 'supabase') {
+        if (config.dbType === 'supabase' && !process.env.VERCEL) {
             startFileWatcher();
         }
     });
